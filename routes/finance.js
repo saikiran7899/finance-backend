@@ -30,26 +30,87 @@ router.get("/entries", async (req, res) => {
   }
 });
 
-// POST /api/entries  { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount }
+// GET /api/fund-sources — active credit entries with balance left, for the Debit fund-source picker
+router.get("/fund-sources", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, name, available_balance, purpose, date FROM credit_ledger WHERE available_balance > 0 ORDER BY date DESC`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/entries
+// { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId }
+// fundSourceId: "OWN" | credit_ledger id | array of ids — same as your original Apps Script logic
 router.post("/entries", async (req, res) => {
-  const { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount } = req.body;
+  const { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId } = req.body;
   if (!date || !name || !amount || !type) {
     return res.status(400).json({ success: false, error: "Missing required fields" });
   }
-  const table = type.toUpperCase() === "CREDIT" ? "credit_ledger" : "debit_ledger";
-  const lastCol = type.toUpperCase() === "CREDIT" ? "available_balance" : "status";
-  const lastVal = type.toUpperCase() === "CREDIT" ? amount : "OWN ACCOUNT";
+
+  const conn = await pool.getConnection();
   try {
-    const [result] = await pool.query(
+    await conn.beginTransaction();
+    const isCredit = type.toUpperCase() === "CREDIT";
+    let finalSourceInfo = "OWN ACCOUNT";
+
+    if (!isCredit && fundSourceId && fundSourceId !== "OWN") {
+      // Same deduction logic as your original addEntry(): spend down selected
+      // credit sources in order, spill over to the next if one runs short.
+      let remainingToDeduct = Number(amount);
+      let sourcesUsed = [];
+      const sourceIds = Array.isArray(fundSourceId) ? fundSourceId : [fundSourceId];
+
+      for (const rowId of sourceIds) {
+        if (rowId === "OWN" || remainingToDeduct <= 0) continue;
+
+        const [rows] = await conn.query(
+          `SELECT name, available_balance, date FROM credit_ledger WHERE id = ? FOR UPDATE`,
+          [rowId]
+        );
+        if (rows.length === 0) continue;
+        const { name: sName, available_balance: availBal, date: sDate } = rows[0];
+
+        if (Number(availBal) > 0) {
+          const deduction = Math.min(remainingToDeduct, Number(availBal));
+          const newBalance = Number(availBal) - deduction;
+
+          await conn.query(`UPDATE credit_ledger SET available_balance = ? WHERE id = ?`, [newBalance, rowId]);
+
+          sourcesUsed.push(`${sName} (₹${deduction} on ${new Date(sDate).toISOString().split("T")[0]} #${rowId})`);
+          remainingToDeduct -= deduction;
+        }
+      }
+
+      if (remainingToDeduct > 0.01) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, error: "Insufficient balance in selected fund source(s)" });
+      }
+      finalSourceInfo = sourcesUsed.length === 1 ? "LINKED: " + sourcesUsed[0] : "LINKED: COMBINED- " + sourcesUsed.join(", ");
+    }
+
+    const table = isCredit ? "credit_ledger" : "debit_ledger";
+    const lastCol = isCredit ? "available_balance" : "status";
+    const lastVal = isCredit ? amount : finalSourceInfo;
+
+    const [result] = await conn.query(
       `INSERT INTO ${table} (date, name, place, amount, mode, purpose, sent_by, bank_name, note, timestamp, ${lastCol})
        VALUES (?,?,?,?,?,?,?,?,?,NOW(),?)`,
       [date, (name || "").toUpperCase(), (place || "").toUpperCase(), amount, (mode || "").toUpperCase(),
        (purpose || "").toUpperCase(), (sentBy || "").toUpperCase(), (bankAccount || "").toUpperCase(),
        (notes || "").toUpperCase(), lastVal]
     );
-    res.json({ success: true, data: { id: result.insertId } });
+
+    await conn.commit();
+    res.json({ success: true, data: { id: result.insertId, sourceInfo: finalSourceInfo } });
   } catch (err) {
+    await conn.rollback();
     res.status(500).json({ success: false, error: err.message });
+  } finally {
+    conn.release();
   }
 });
 
