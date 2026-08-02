@@ -43,10 +43,11 @@ router.get("/fund-sources", async (req, res) => {
 });
 
 // POST /api/entries
-// { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId }
+// { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId, billImageUrl }
 // fundSourceId: "OWN" | credit_ledger id | array of ids — same as your original Apps Script logic
+// billImageUrl: comma-separated Cloudinary URL(s), already uploaded by the app before this call
 router.post("/entries", async (req, res) => {
-  const { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId } = req.body;
+  const { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId, billImageUrl } = req.body;
   if (!date || !name || !amount || !type) {
     return res.status(400).json({ success: false, error: "Missing required fields" });
   }
@@ -80,7 +81,9 @@ router.post("/entries", async (req, res) => {
 
           await conn.query(`UPDATE credit_ledger SET available_balance = ? WHERE id = ?`, [newBalance, rowId]);
 
-          sourcesUsed.push(`${sName} (₹${deduction} on ${new Date(sDate).toISOString().split("T")[0]} #${rowId})`);
+          const d = new Date(sDate);
+          const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          sourcesUsed.push(`${sName} (₹${deduction} on ${localDateStr} #${rowId})`);
           remainingToDeduct -= deduction;
         }
       }
@@ -97,11 +100,11 @@ router.post("/entries", async (req, res) => {
     const lastVal = isCredit ? amount : finalSourceInfo;
 
     const [result] = await conn.query(
-      `INSERT INTO ${table} (date, name, place, amount, mode, purpose, sent_by, bank_name, note, timestamp, ${lastCol})
-       VALUES (?,?,?,?,?,?,?,?,?,NOW(),?)`,
+      `INSERT INTO ${table} (date, name, place, amount, mode, purpose, sent_by, bank_name, note, timestamp, ${lastCol}, drive_link)
+       VALUES (?,?,?,?,?,?,?,?,?,NOW(),?,?)`,
       [date, (name || "").toUpperCase(), (place || "").toUpperCase(), amount, (mode || "").toUpperCase(),
        (purpose || "").toUpperCase(), (sentBy || "").toUpperCase(), (bankAccount || "").toUpperCase(),
-       (notes || "").toUpperCase(), lastVal]
+       (notes || "").toUpperCase(), lastVal, billImageUrl || ""]
     );
 
     await conn.commit();
