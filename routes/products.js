@@ -16,13 +16,13 @@ router.get("/products", async (req, res) => {
 });
 
 router.post("/products", async (req, res) => {
-  const { productName, brand, purchaseDate, amount, mode, warrantyExpiry, notes } = req.body;
+  const { productName, brand, purchaseDate, amount, mode, warrantyExpiry, notes, billImageUrl } = req.body;
   if (!productName) return res.status(400).json({ success: false, error: "Product name required" });
   try {
     const [result] = await pool.query(
-      `INSERT INTO products (product_name, brand, purchase_date, amount, mode, warranty_expiry, notes)
-       VALUES (?,?,?,?,?,?,?)`,
-      [productName.toUpperCase(), (brand || "").toUpperCase(), purchaseDate || null, amount || 0, mode || "", warrantyExpiry || null, notes || ""]
+      `INSERT INTO products (product_name, brand, purchase_date, amount, mode, warranty_expiry, notes, bill_link)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [productName.toUpperCase(), (brand || "").toUpperCase(), purchaseDate || null, amount || 0, mode || "", warrantyExpiry || null, notes || "", billImageUrl || ""]
     );
     res.json({ success: true, data: { id: result.insertId } });
   } catch (err) {
@@ -50,13 +50,13 @@ router.get("/products/:id/service-history", async (req, res) => {
 });
 
 router.post("/products/:id/service-history", async (req, res) => {
-  const { serviceDate, description, mode, amount, warrantyPeriod, notes } = req.body;
+  const { serviceDate, description, mode, amount, warrantyPeriod, notes, billImageUrl } = req.body;
   if (!description) return res.status(400).json({ success: false, error: "Description required" });
   try {
     const [result] = await pool.query(
-      `INSERT INTO service_history (product_id, service_date, description, mode, amount, warranty_period, notes)
-       VALUES (?,?,?,?,?,?,?)`,
-      [req.params.id, serviceDate || null, description, mode || "", amount || 0, warrantyPeriod || "", notes || ""]
+      `INSERT INTO service_history (product_id, service_date, description, mode, amount, warranty_period, notes, bill_link)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [req.params.id, serviceDate || null, description, mode || "", amount || 0, warrantyPeriod || "", notes || "", billImageUrl || ""]
     );
     res.json({ success: true, data: { id: result.insertId } });
   } catch (err) {
@@ -64,4 +64,14 @@ router.post("/products/:id/service-history", async (req, res) => {
   }
 });
 
+router.delete("/products/:productId/service-history/:id", async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM service_history WHERE id=?`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
+
