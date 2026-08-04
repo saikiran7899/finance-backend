@@ -134,4 +134,36 @@ router.get("/monthly-report", async (req, res) => {
   }
 });
 
+// PUT /api/entries/:type/:id — edits an existing entry's basic fields.
+// Note: this does NOT recompute fund-source balances if you change the
+// amount on a linked debit — that linkage is only calculated at creation.
+router.put("/entries/:type/:id", async (req, res) => {
+  const { type, id } = req.params;
+  const { date, name, place, amount, mode, purpose, notes, sentBy, bankAccount } = req.body;
+  const table = type.toUpperCase() === "CREDIT" ? "credit_ledger" : "debit_ledger";
+  try {
+    await pool.query(
+      `UPDATE ${table} SET date=?, name=?, place=?, amount=?, mode=?, purpose=?, sent_by=?, bank_name=?, note=? WHERE id=?`,
+      [date, (name || "").toUpperCase(), (place || "").toUpperCase(), amount, (mode || "").toUpperCase(),
+       (purpose || "").toUpperCase(), (sentBy || "").toUpperCase(), (bankAccount || "").toUpperCase(),
+       (notes || "").toUpperCase(), id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/entries/:type/:id  — type is "CREDIT" or "DEBIT"
+router.delete("/entries/:type/:id", async (req, res) => {
+  const { type, id } = req.params;
+  const table = type.toUpperCase() === "CREDIT" ? "credit_ledger" : "debit_ledger";
+  try {
+    await pool.query(`DELETE FROM ${table} WHERE id = ?`, [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
