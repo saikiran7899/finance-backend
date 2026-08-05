@@ -117,6 +117,7 @@ router.post("/entries", async (req, res) => {
     await conn.commit();
     res.json({ success: true, data: { id: result.insertId, serialNo: nextSerial, sourceInfo: finalSourceInfo } });
   } catch (err) {
+    console.error("POST /api/entries failed:", err);
     await conn.rollback();
     res.status(500).json({ success: false, error: err.message });
   } finally {
