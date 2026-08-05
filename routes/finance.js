@@ -34,7 +34,7 @@ router.get("/entries", async (req, res) => {
 router.get("/fund-sources", async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT id, name, available_balance, purpose, date FROM credit_ledger WHERE available_balance > 0 ORDER BY date DESC`
+      `SELECT serial_no, name, available_balance, purpose, date FROM credit_ledger WHERE available_balance > 0 ORDER BY date DESC`
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -69,7 +69,7 @@ router.post("/entries", async (req, res) => {
         if (rowId === "OWN" || remainingToDeduct <= 0) continue;
 
         const [rows] = await conn.query(
-          `SELECT name, available_balance, date FROM credit_ledger WHERE id = ? FOR UPDATE`,
+          `SELECT name, available_balance, date FROM credit_ledger WHERE serial_no = ? FOR UPDATE`,
           [rowId]
         );
         if (rows.length === 0) continue;
@@ -79,7 +79,7 @@ router.post("/entries", async (req, res) => {
           const deduction = Math.min(remainingToDeduct, Number(availBal));
           const newBalance = Number(availBal) - deduction;
 
-          await conn.query(`UPDATE credit_ledger SET available_balance = ? WHERE id = ?`, [newBalance, rowId]);
+          await conn.query(`UPDATE credit_ledger SET available_balance = ? WHERE serial_no = ?`, [newBalance, rowId]);
 
           const d = new Date(sDate);
           const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
