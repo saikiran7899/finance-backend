@@ -8,13 +8,13 @@ router.get("/entries", async (req, res) => {
   try {
     const [credit] = await pool.query(
       `SELECT id, date, name, place, amount, 'CREDIT' as type, mode, purpose, sent_by, bank_name, note,
-              available_balance as status_or_balance, drive_link
+              available_balance as status_or_balance, drive_link, serial_no
        FROM credit_ledger WHERE date BETWEEN ? AND ? ORDER BY date DESC`,
       [fromDate, toDate]
     );
     const [debit] = await pool.query(
       `SELECT id, date, name, place, amount, 'DEBIT' as type, mode, purpose, sent_by, bank_name, note,
-              status as status_or_balance, drive_link
+              status as status_or_balance, drive_link, serial_no
        FROM debit_ledger WHERE date BETWEEN ? AND ? ORDER BY date DESC`,
       [fromDate, toDate]
     );
@@ -99,16 +99,23 @@ router.post("/entries", async (req, res) => {
     const lastCol = isCredit ? "available_balance" : "status";
     const lastVal = isCredit ? amount : finalSourceInfo;
 
+    // Assign the next gap-free serial number for this table (separate from
+    // the permanent, never-reused `id` used for linking).
+    const [serialRows] = await conn.query(
+      `SELECT COALESCE(MAX(serial_no), 0) + 1 AS nextSerial FROM ${table}`
+    );
+    const nextSerial = serialRows[0].nextSerial;
+
     const [result] = await conn.query(
-      `INSERT INTO ${table} (date, name, place, amount, mode, purpose, sent_by, bank_name, note, timestamp, ${lastCol}, drive_link)
-       VALUES (?,?,?,?,?,?,?,?,?,NOW(),?,?)`,
+      `INSERT INTO ${table} (date, name, place, amount, mode, purpose, sent_by, bank_name, note, timestamp, ${lastCol}, drive_link, serial_no)
+       VALUES (?,?,?,?,?,?,?,?,?,NOW(),?,?,?)`,
       [date, (name || "").toUpperCase(), (place || "").toUpperCase(), amount, (mode || "").toUpperCase(),
        (purpose || "").toUpperCase(), (sentBy || "").toUpperCase(), (bankAccount || "").toUpperCase(),
-       (notes || "").toUpperCase(), lastVal, billImageUrl || ""]
+       (notes || "").toUpperCase(), lastVal, billImageUrl || "", nextSerial]
     );
 
     await conn.commit();
-    res.json({ success: true, data: { id: result.insertId, sourceInfo: finalSourceInfo } });
+    res.json({ success: true, data: { id: result.insertId, serialNo: nextSerial, sourceInfo: finalSourceInfo } });
   } catch (err) {
     await conn.rollback();
     res.status(500).json({ success: false, error: err.message });
