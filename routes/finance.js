@@ -52,7 +52,7 @@ router.get("/fund-sources", async (req, res) => {
 // fundSourceId: "OWN" | a credit entry's serial_no | array of serial_nos
 // billImageUrl: comma-separated Cloudinary URL(s), already uploaded by the app before this call
 router.post("/entries", async (req, res) => {
-  const { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId, billImageUrl } = req.body;
+  const { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId, billImageUrl, serialNo } = req.body;
   if (!date || !name || !amount || !type) {
     return res.status(400).json({ success: false, error: "Missing required fields" });
   }
@@ -102,13 +102,18 @@ router.post("/entries", async (req, res) => {
       finalSourceInfo = sourcesUsed.length === 1 ? "LINKED: " + sourcesUsed[0] : "LINKED: COMBINED- " + sourcesUsed.join(", ");
     }
 
-    // Next gap-free serial number for this table — same MAX(serial_no)+1
-    // pattern as your original Apps Script, computed inside this same
-    // transaction so two simultaneous inserts can't collide.
-    const [serialRows] = await conn.query(
-      `SELECT COALESCE(MAX(serial_no), 0) + 1 AS nextSerial FROM ${table}`
-    );
-    const nextSerial = serialRows[0].nextSerial;
+    // The app now assigns serial_no itself (single-device usage means it can
+    // safely look at its own local data), so this call just trusts it —
+    // that's what lets a Debit reference a Credit added seconds earlier
+    // without both having to round-trip through a sync first. Falls back
+    // to computing one here only if the app didn't send one.
+    let nextSerial = serialNo;
+    if (!nextSerial) {
+      const [serialRows] = await conn.query(
+        `SELECT COALESCE(MAX(serial_no), 0) + 1 AS nextSerial FROM ${table}`
+      );
+      nextSerial = serialRows[0].nextSerial;
+    }
 
     const lastCol = isCredit ? "available_balance" : "status";
     const lastVal = isCredit ? amount : finalSourceInfo;
