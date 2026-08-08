@@ -36,6 +36,21 @@ router.get("/entries", async (req, res) => {
 });
 
 // GET /api/fund-sources — active credit entries with balance left, for the Debit fund-source picker
+// GET /api/entries/next-serial?type=CREDIT|DEBIT
+// Called automatically the moment you tap Submit — checks the live
+// database directly so the assigned number can't drift from reality,
+// without needing to wait for a manual sync first.
+router.get("/entries/next-serial", async (req, res) => {
+  const type = (req.query.type || "").toUpperCase();
+  const table = type === "CREDIT" ? "credit_ledger" : "debit_ledger";
+  try {
+    const [rows] = await pool.query(`SELECT COALESCE(MAX(serial_no), 0) + 1 AS nextSerial FROM ${table}`);
+    res.json({ success: true, data: { nextSerial: rows[0].nextSerial } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get("/fund-sources", async (req, res) => {
   try {
     const [rows] = await pool.query(
