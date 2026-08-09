@@ -13,6 +13,7 @@ router.get("/notes", async (req, res) => {
   }
 });
 
+
 router.post("/notes", async (req, res) => {
   const { phrase, note, date, billImageUrl } = req.body;
   if (!phrase || !note) return res.status(400).json({ success: false, error: "Phrase and note required" });
