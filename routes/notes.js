@@ -13,7 +13,6 @@ router.get("/notes", async (req, res) => {
   }
 });
 
-
 router.post("/notes", async (req, res) => {
   const { phrase, note, date, billImageUrl } = req.body;
   if (!phrase || !note) return res.status(400).json({ success: false, error: "Phrase and note required" });
@@ -25,6 +24,34 @@ router.post("/notes", async (req, res) => {
       [date || now.toISOString().split("T")[0], phrase.toUpperCase(), note, timeStr, billImageUrl || ""]
     );
     res.json({ success: true, data: { id: result.insertId } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put("/notes/:id", async (req, res) => {
+  const { phrase, note, date, billImageUrl } = req.body;
+  if (!phrase || !note) return res.status(400).json({ success: false, error: "Phrase and note required" });
+  try {
+    const params = [phrase.toUpperCase(), note, date];
+    let sql = "UPDATE daily_notes SET `Phrase`=?, `Notes`=?, `Date`=?";
+    if (billImageUrl !== undefined) {
+      sql += ", `Drive_Link`=?";
+      params.push(billImageUrl || "");
+    }
+    sql += " WHERE id=?";
+    params.push(req.params.id);
+    await pool.query(sql, params);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete("/notes/:id", async (req, res) => {
+  try {
+    await pool.query("DELETE FROM daily_notes WHERE id=?", [req.params.id]);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
