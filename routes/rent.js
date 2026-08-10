@@ -52,6 +52,7 @@ router.get("/rent/dashboard", async (req, res) => {
 
         for (let i = 0; i < totalM; i++) {
           const cycleStart = new Date(startYear, startMonth + i, cycleDay);
+          const cycleEnd = new Date(startYear, startMonth + i + 1, cycleDay);
           let ar = baseRent;
           if (rentTimeline[tId]) {
             const cur = new Date(cycleStart.getFullYear(), cycleStart.getMonth(), 1);
@@ -60,7 +61,7 @@ router.get("/rent/dashboard", async (req, res) => {
               .sort((a, b) => b.effDate - a.effDate);
             if (applicable.length > 0) ar = applicable[0].amount;
           }
-          const label = `${dd} ${MONTH_ABBR[cycleStart.getMonth()]} ${cycleStart.getFullYear()}`;
+          const label = `${dd} ${MONTH_ABBR[cycleStart.getMonth()]} ${cycleStart.getFullYear()} to ${dd} ${MONTH_ABBR[cycleEnd.getMonth()]} ${cycleEnd.getFullYear()}`;
           if (credit >= ar && ar > 0) {
             credit -= ar;
           } else {
