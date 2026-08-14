@@ -12,15 +12,29 @@ router.get("/reminders", async (req, res) => {
 });
 
 router.post("/reminders", async (req, res) => {
-  const { title, description, reminderType, reminderMonth, reminderDay, amount } = req.body;
+  const { title, description, reminderType, reminderMonth, reminderDay, reminderWeekday, amount } = req.body;
   if (!title) return res.status(400).json({ success: false, error: "Title required" });
   try {
     const [result] = await pool.query(
-      `INSERT INTO reminders (title, description, reminder_type, reminder_month, reminder_day, amount, status, created_date)
-       VALUES (?,?,?,?,?,?,'active',CURDATE())`,
-      [title.toUpperCase(), description || "", reminderType || "monthly", reminderMonth || 1, reminderDay || 1, amount || 0]
+      `INSERT INTO reminders (title, description, reminder_type, reminder_month, reminder_day, reminder_weekday, amount, status, created_date)
+       VALUES (?,?,?,?,?,?,?,'active',CURDATE())`,
+      [title.toUpperCase(), description || "", reminderType || "monthly", reminderMonth || 1, reminderDay || 1, reminderWeekday || 0, amount || 0]
     );
     res.json({ success: true, data: { id: result.insertId } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put("/reminders/:id", async (req, res) => {
+  const { title, description, reminderType, reminderMonth, reminderDay, reminderWeekday, amount } = req.body;
+  if (!title) return res.status(400).json({ success: false, error: "Title required" });
+  try {
+    await pool.query(
+      `UPDATE reminders SET title=?, description=?, reminder_type=?, reminder_month=?, reminder_day=?, reminder_weekday=?, amount=? WHERE id=?`,
+      [title.toUpperCase(), description || "", reminderType || "monthly", reminderMonth || 1, reminderDay || 1, reminderWeekday || 0, amount || 0, req.params.id]
+    );
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
