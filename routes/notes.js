@@ -13,6 +13,18 @@ router.get("/notes", async (req, res) => {
   }
 });
 
+// mysql2 returns DATE columns as JS Date objects by default (no
+// dateStrings option set on the pool). When a note gets pulled from the
+// server, cached locally, then edited and sent back, JSON.stringify
+// silently turns that Date object into a full ISO string
+// ("2026-08-15T00:00:00.000Z") — which MySQL's DATE column rejects,
+// since it only accepts "YYYY-MM-DD". Always strip to the date portion
+// before it reaches a query, regardless of which shape it arrives in.
+function toDateOnly(d) {
+  if (!d) return new Date().toISOString().split("T")[0];
+  return String(d).split("T")[0];
+}
+
 router.post("/notes", async (req, res) => {
   const { phrase, note, date, billImageUrl } = req.body;
   if (!phrase || !note) return res.status(400).json({ success: false, error: "Phrase and note required" });
@@ -21,7 +33,7 @@ router.post("/notes", async (req, res) => {
     const timeStr = now.toTimeString().split(" ")[0];
     const [result] = await pool.query(
       "INSERT INTO daily_notes (`Date`, `Phrase`, `Notes`, `Time`, `Drive_Link`) VALUES (?,?,?,?,?)",
-      [date || now.toISOString().split("T")[0], phrase.toUpperCase(), note, timeStr, billImageUrl || ""]
+      [toDateOnly(date), phrase.toUpperCase(), note, timeStr, billImageUrl || ""]
     );
     res.json({ success: true, data: { id: result.insertId } });
   } catch (err) {
@@ -33,7 +45,7 @@ router.put("/notes/:id", async (req, res) => {
   const { phrase, note, date, billImageUrl } = req.body;
   if (!phrase || !note) return res.status(400).json({ success: false, error: "Phrase and note required" });
   try {
-    const params = [phrase.toUpperCase(), note, date];
+    const params = [phrase.toUpperCase(), note, toDateOnly(date)];
     let sql = "UPDATE daily_notes SET `Phrase`=?, `Notes`=?, `Date`=?";
     if (billImageUrl !== undefined) {
       sql += ", `Drive_Link`=?";
