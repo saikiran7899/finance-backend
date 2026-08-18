@@ -8,6 +8,7 @@ const reminderRoutes = require("./routes/reminders");
 const productRoutes = require("./routes/products");
 const noteRoutes = require("./routes/notes");
 const rentRoutes = require("./routes/rent");
+const placesRoutes = require("./routes/places");
 
 const app = express();
 app.use(cors());
@@ -22,6 +23,7 @@ app.use("/api", requireApiKey, reminderRoutes);
 app.use("/api", requireApiKey, productRoutes);
 app.use("/api", requireApiKey, noteRoutes);
 app.use("/api", requireApiKey, rentRoutes);
+app.use("/api", requireApiKey, placesRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Finance Manager backend running on port ${PORT}`));
