@@ -41,7 +41,8 @@ router.get("/places/details", async (req, res) => {
     return res.status(500).json({ error: "GOOGLE_MAPS_API_KEY not configured on server" });
   }
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(place_id)}&fields=name,geometry,formatted_address&key=${PLACES_KEY}`;
+    // Include 'url' in fields — Google returns the canonical maps.google.com/?cid=... link
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(place_id)}&fields=name,geometry,formatted_address,url&key=${PLACES_KEY}`;
     const response = await fetch(url);
     const data = await response.json();
     res.json(data);
