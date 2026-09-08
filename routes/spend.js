@@ -2,6 +2,13 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 
+// mysql2 auto-parses columns declared as JSON type into JS objects already —
+// but only sometimes depending on driver/version behavior, so handle both
+// shapes rather than assuming JSON.parse is always needed (or never needed).
+function parseData(d) {
+  return typeof d === "string" ? JSON.parse(d) : d;
+}
+
 // Quick Spend stores each entry as a JSON blob keyed by the id the phone
 // already generated locally (never a server-assigned id — see the app's
 // own "assign ids on-device" rule, this avoids any create/sync round trip).
@@ -34,7 +41,7 @@ router.use(async (req, res, next) => {
 router.get("/spend/expenses", async (req, res) => {
   try {
     const [rows] = await pool.query(`SELECT id, data FROM spend_expenses`);
-    res.json({ success: true, data: rows.map(r => ({ id: r.id, ...JSON.parse(r.data) })) });
+    res.json({ success: true, data: rows.map(r => ({ id: r.id, ...parseData(r.data) })) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -77,7 +84,7 @@ router.delete("/spend/expenses/:id", async (req, res) => {
 router.get("/spend/payments", async (req, res) => {
   try {
     const [rows] = await pool.query(`SELECT id, data FROM spend_payments`);
-    res.json({ success: true, data: rows.map(r => ({ id: r.id, ...JSON.parse(r.data) })) });
+    res.json({ success: true, data: rows.map(r => ({ id: r.id, ...parseData(r.data) })) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
