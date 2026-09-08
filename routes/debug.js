@@ -14,6 +14,12 @@ const pool = require("../db");
 
 const DEBUG_KEY = process.env.API_KEY;
 
+// mysql2 auto-parses columns declared as JSON type into JS objects already —
+// handle both shapes rather than assuming JSON.parse is always needed.
+function parseData(d) {
+  return typeof d === "string" ? JSON.parse(d) : d;
+}
+
 function checkKey(req, res) {
   if (!DEBUG_KEY || req.query.key !== DEBUG_KEY) {
     res.status(401).json({ success: false, error: "Unauthorized — add ?key=YOUR_API_KEY to the URL" });
@@ -23,7 +29,6 @@ function checkKey(req, res) {
 }
 
 // Visit: /api/debug/tables?key=YOUR_API_KEY
-// Lists every table that actually exists in your database right now.
 router.get("/debug/tables", async (req, res) => {
   if (!checkKey(req, res)) return;
   try {
@@ -36,8 +41,6 @@ router.get("/debug/tables", async (req, res) => {
 });
 
 // Visit: /api/debug/test-spend?key=YOUR_API_KEY
-// Runs the EXACT same steps the Quick Spend POST route runs: create the
-// table if missing, insert one test row, then read it back.
 router.get("/debug/test-spend", async (req, res) => {
   if (!checkKey(req, res)) return;
   try {
@@ -58,9 +61,6 @@ router.get("/debug/test-spend", async (req, res) => {
 });
 
 // Visit: /api/debug/spend-data?key=YOUR_API_KEY
-// Shows every real row currently stored in spend_expenses and spend_payments —
-// this is the one to use to actually see your data, not just confirm the
-// tables exist.
 router.get("/debug/spend-data", async (req, res) => {
   if (!checkKey(req, res)) return;
   try {
@@ -69,13 +69,13 @@ router.get("/debug/spend-data", async (req, res) => {
     );
     const [paymentRows] = await pool.query(
       "SELECT id, data, updated_at FROM spend_payments ORDER BY updated_at DESC"
-    ).catch(() => [[]]); // table may not exist yet if you've never logged a person payment
+    ).catch(() => [[]]);
 
     res.json({
       success: true,
       data: {
-        expenses: expenseRows.map(r => ({ id: r.id, ...JSON.parse(r.data), updated_at: r.updated_at })),
-        payments: paymentRows.map(r => ({ id: r.id, ...JSON.parse(r.data), updated_at: r.updated_at }))
+        expenses: expenseRows.map(r => ({ id: r.id, ...parseData(r.data), updated_at: r.updated_at })),
+        payments: paymentRows.map(r => ({ id: r.id, ...parseData(r.data), updated_at: r.updated_at }))
       }
     });
   } catch (err) {
