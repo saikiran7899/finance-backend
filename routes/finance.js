@@ -200,7 +200,7 @@ router.put("/entries/:type/:id", async (req, res) => {
 // a balance change without it being tied to a new DEBIT draw.
 router.put("/entries/:type/:id/balance", async (req, res) => {
   const { type, id } = req.params; // id = serial_no
-  const { available_balance } = req.body;
+  const { available_balance, note } = req.body;
   if (type.toUpperCase() !== "CREDIT") {
     return res.status(400).json({ success: false, error: "Balance can only be set on CREDIT entries" });
   }
@@ -208,7 +208,13 @@ router.put("/entries/:type/:id/balance", async (req, res) => {
     return res.status(400).json({ success: false, error: "available_balance must be a number" });
   }
   try {
-    await pool.query(`UPDATE credit_ledger SET available_balance = ? WHERE serial_no = ?`, [Number(available_balance), id]);
+    // note carries the "[ROUNDED OFF ₹X]" marker the app stashes so it can
+    // still show "₹X no trace" next to Available Balance after this zeroes it.
+    if (note !== undefined && note !== null) {
+      await pool.query(`UPDATE credit_ledger SET available_balance = ?, note = ? WHERE serial_no = ?`, [Number(available_balance), String(note).toUpperCase(), id]);
+    } else {
+      await pool.query(`UPDATE credit_ledger SET available_balance = ? WHERE serial_no = ?`, [Number(available_balance), id]);
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
