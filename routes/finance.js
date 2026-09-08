@@ -67,7 +67,7 @@ router.get("/fund-sources", async (req, res) => {
 // fundSourceId: "OWN" | a credit entry's serial_no | array of serial_nos
 // billImageUrl: comma-separated Cloudinary URL(s), already uploaded by the app before this call
 router.post("/entries", async (req, res) => {
-  const { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId, billImageUrl, serialNo } = req.body;
+  const { date, name, place, amount, type, mode, purpose, notes, sentBy, bankAccount, fundSourceId, billImageUrl, serialNo, statusPreview } = req.body;
   if (!date || !name || !amount || !type) {
     return res.status(400).json({ success: false, error: "Missing required fields" });
   }
@@ -130,8 +130,14 @@ router.post("/entries", async (req, res) => {
       nextSerial = serialRows[0].nextSerial;
     }
 
+    // For a CREDIT, statusPreview (when it's a plain number) carries the
+    // already-reduced balance the app computed locally — e.g. a DEBIT drew
+    // from this same fund source, or it was rounded off to zero — before
+    // this create ever reached the server. Fall back to the full amount
+    // when no such adjustment was made.
+    const isCreditBalanceOverride = isCredit && statusPreview !== undefined && statusPreview !== null && !isNaN(Number(statusPreview));
     const lastCol = isCredit ? "available_balance" : "status";
-    const lastVal = isCredit ? amount : finalSourceInfo;
+    const lastVal = isCredit ? (isCreditBalanceOverride ? Number(statusPreview) : amount) : finalSourceInfo;
 
     await conn.query(
       `INSERT INTO ${table} (date, name, place, amount, mode, purpose, sent_by, bank_name, note, timestamp, ${lastCol}, drive_link, serial_no)
@@ -182,6 +188,27 @@ router.put("/entries/:type/:id", async (req, res) => {
        (purpose || "").toUpperCase(), (sentBy || "").toUpperCase(), (bankAccount || "").toUpperCase(),
        (notes || "").toUpperCase(), id]
     );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/entries/:type/:id/balance — sets available_balance directly on a CREDIT
+// entry. Used by the "Round off to zero" action: unlike the generic PUT above (which
+// never touches available_balance), this is the only route that can actually persist
+// a balance change without it being tied to a new DEBIT draw.
+router.put("/entries/:type/:id/balance", async (req, res) => {
+  const { type, id } = req.params; // id = serial_no
+  const { available_balance } = req.body;
+  if (type.toUpperCase() !== "CREDIT") {
+    return res.status(400).json({ success: false, error: "Balance can only be set on CREDIT entries" });
+  }
+  if (available_balance === undefined || available_balance === null || isNaN(Number(available_balance))) {
+    return res.status(400).json({ success: false, error: "available_balance must be a number" });
+  }
+  try {
+    await pool.query(`UPDATE credit_ledger SET available_balance = ? WHERE serial_no = ?`, [Number(available_balance), id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
